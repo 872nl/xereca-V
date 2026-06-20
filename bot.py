@@ -16,9 +16,8 @@ if not TOKEN:
 owners_str = os.environ.get("OWNER_IDS", "")
 OWNER_IDS = [int(id.strip()) for id in owners_str.split(",") if id.strip()] if owners_str else []
 
-# === ID DE TU SERVIDOR (CAMBIA ESTO) ===
-# Para obtenerlo: Discord → Ajustes → Modo Desarrollador → Click derecho al servidor → Copiar ID
-GUILD_ID = 1219340286187278546  # <--- PON AQUÍ EL ID DE TU SERVIDOR
+# === ID DE TU SERVIDOR ===
+GUILD_ID = 1219340286187278546
 
 ARCHIVO_LINKS = "links.json"
 
@@ -37,7 +36,7 @@ def guardar_links(links):
 # === BOT DE DISCORD ===
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="/", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)  # ← Cambiado a ! para el comando sync
 
 def es_owner(interaction: Interaction) -> bool:
     return interaction.user.id in OWNER_IDS
@@ -172,15 +171,50 @@ async def ver_owners(interaction: Interaction):
     embed.set_footer(text="Xereca Bot")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# === SINCORNIZAR COMANDOS EN EL SERVIDOR ESPECÍFICO ===
+# === COMANDO !sync PARA FORZAR SINCRONIZACIÓN (SOLO OWNERS) ===
+@bot.command(name="sync")
+async def sync_commands(ctx):
+    """Fuerza la sincronización de los comandos slash (solo owners)"""
+    # Verificar si es owner
+    if ctx.author.id not in OWNER_IDS:
+        await ctx.send("⛔ Solo los owners pueden usar este comando.")
+        return
+    
+    try:
+        # Sincronizar en el servidor específico
+        guild = discord.Object(id=GUILD_ID)
+        await bot.tree.sync(guild=guild)
+        await ctx.send(f"✅ Comandos sincronizados en el servidor! (ID: {GUILD_ID})")
+        
+        # También sincronizar globalmente
+        await bot.tree.sync()
+        await ctx.send("✅ Comandos sincronizados globalmente también!")
+            
+    except Exception as e:
+        await ctx.send(f"❌ Error al sincronizar: {e}")
+
+# === SINCORNIZAR COMANDOS EN EL SERVIDOR ESPECÍFICO AL INICIAR ===
 @bot.event
 async def on_ready():
-    # Sincronizar solo en el servidor específico (sincronía inmediata)
-    guild = discord.Object(id=GUILD_ID)
-    await bot.tree.sync(guild=guild)
+    try:
+        # Sincronizar en el servidor específico
+        guild = discord.Object(id=GUILD_ID)
+        await bot.tree.sync(guild=guild)
+        print(f"✅ Comandos sincronizados en el servidor: {GUILD_ID}")
+    except Exception as e:
+        print(f"❌ Error al sincronizar: {e}")
+    
+    # También sincronizar globalmente
+    try:
+        await bot.tree.sync()
+        print("✅ Comandos sincronizados globalmente")
+    except Exception as e:
+        print(f"❌ Error al sincronizar global: {e}")
+    
     print(f"🤖 Xereca Bot conectado como {bot.user}")
     print(f"👑 Owners: {OWNER_IDS}")
-    print(f"✅ Comandos sincronizados en el servidor: {GUILD_ID}")
+    print(f"📊 Conectado a {len(bot.guilds)} servidores")
+    print("💡 Si no ves los comandos, usa !sync en Discord")
 
 # === SERVIDOR WEB PARA MANTENER EL BOT VIVO ===
 app = Flask(__name__)
