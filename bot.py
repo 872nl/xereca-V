@@ -5,16 +5,20 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from discord import ButtonStyle, Interaction, Embed
-from flask import Flask, render_template_string
+from flask import Flask
 
 # === CONFIGURACIÓN DESDE VARIABLES DE ENTORNO ===
-TOKEN = os.environ.get("DISCORD_TOKEN")  # ← OJO: Render usa variables de entorno
+TOKEN = os.environ.get("DISCORD_TOKEN")
 if not TOKEN:
     raise ValueError("No se encontró DISCORD_TOKEN en las variables de entorno")
 
 # Owners desde variable de entorno (formato: "ID1,ID2")
 owners_str = os.environ.get("OWNER_IDS", "")
 OWNER_IDS = [int(id.strip()) for id in owners_str.split(",") if id.strip()] if owners_str else []
+
+# === ID DE TU SERVIDOR (CAMBIA ESTO) ===
+# Para obtenerlo: Discord → Ajustes → Modo Desarrollador → Click derecho al servidor → Copiar ID
+GUILD_ID = 1219340286187278546  # <--- PON AQUÍ EL ID DE TU SERVIDOR
 
 ARCHIVO_LINKS = "links.json"
 
@@ -168,12 +172,15 @@ async def ver_owners(interaction: Interaction):
     embed.set_footer(text="Xereca Bot")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# === SINCORNIZAR COMANDOS AL INICIAR ===
+# === SINCORNIZAR COMANDOS EN EL SERVIDOR ESPECÍFICO ===
 @bot.event
 async def on_ready():
-    await bot.tree.sync()
+    # Sincronizar solo en el servidor específico (sincronía inmediata)
+    guild = discord.Object(id=GUILD_ID)
+    await bot.tree.sync(guild=guild)
     print(f"🤖 Xereca Bot conectado como {bot.user}")
     print(f"👑 Owners: {OWNER_IDS}")
+    print(f"✅ Comandos sincronizados en el servidor: {GUILD_ID}")
 
 # === SERVIDOR WEB PARA MANTENER EL BOT VIVO ===
 app = Flask(__name__)
