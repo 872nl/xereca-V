@@ -16,9 +16,6 @@ if not TOKEN:
 owners_str = os.environ.get("OWNER_IDS", "")
 OWNER_IDS = [int(id.strip()) for id in owners_str.split(",") if id.strip()] if owners_str else []
 
-# === ID DE TU SERVIDOR ===
-GUILD_ID = 1219340286187278546
-
 ARCHIVO_LINKS = "links.json"
 
 # === FUNCIONES PARA LINKS ===
@@ -33,13 +30,13 @@ def guardar_links(links):
     with open(ARCHIVO_LINKS, "w", encoding="utf-8") as f:
         json.dump(links, f, indent=2, ensure_ascii=False)
 
-# === BOT DE DISCORD ===
+# === BOT DE DISCORD CON PREFIX ! ===
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)  # ← Cambiado a ! para el comando sync
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-def es_owner(interaction: Interaction) -> bool:
-    return interaction.user.id in OWNER_IDS
+def es_owner_id(user_id: int) -> bool:
+    return user_id in OWNER_IDS
 
 # === CLASE DE BOTONES ===
 class DescargaView(discord.ui.View):
@@ -107,12 +104,15 @@ async def on_interaction(interaction: Interaction):
         embed.set_footer(text="Xereca Bot")
         await interaction.response.send_message(embed=embed, ephemeral=True)
     else:
-        embed = Embed(title="❌ Link no disponible", description=f"No hay link configurado para **{nombre_mostrar}**.\nUsa `/actualizar` para configurarlo.", color=discord.Color.red())
+        embed = Embed(title="❌ Link no disponible", description=f"No hay link configurado para **{nombre_mostrar}**.\nUsa `!actualizar` para configurarlo.", color=discord.Color.red())
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# === SLASH COMMANDS ===
+# ============================================
+# SLASH COMMANDS (con / )
+# ============================================
+
 @bot.tree.command(name="start", description="Muestra los botones de descarga")
-async def start(interaction: Interaction):
+async def slash_start(interaction: Interaction):
     embed = Embed(title="📥 Descargas", description="Elige un botón para obtener el link de descarga.", color=discord.Color.blue())
     embed.set_footer(text="Xereca Bot · Admin")
     view = DescargaView()
@@ -120,8 +120,8 @@ async def start(interaction: Interaction):
 
 @bot.tree.command(name="actualizar", description="Actualiza un link de descarga (solo owners)")
 @app_commands.describe(clave="Tipo: normal, x86, max, emulador, loader_sensi, sensi_xiters", link="El nuevo link de descarga")
-async def actualizar(interaction: Interaction, clave: str, link: str):
-    if not es_owner(interaction):
+async def slash_actualizar(interaction: Interaction, clave: str, link: str):
+    if not es_owner_id(interaction.user.id):
         embed = Embed(title="⛔ Permiso denegado", description="Solo los **owners** del bot pueden usar este comando.", color=discord.Color.red())
         await interaction.response.send_message(embed=embed, ephemeral=True)
         return
@@ -142,8 +142,8 @@ async def actualizar(interaction: Interaction, clave: str, link: str):
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="links", description="Muestra todos los links guardados (solo owners)")
-async def ver_links(interaction: Interaction):
-    if not es_owner(interaction):
+async def slash_links(interaction: Interaction):
+    if not es_owner_id(interaction.user.id):
         embed = Embed(title="⛔ Permiso denegado", description="Solo los **owners** del bot pueden usar este comando.", color=discord.Color.red())
         await interaction.response.send_message(embed=embed, ephemeral=True)
         return
@@ -160,7 +160,7 @@ async def ver_links(interaction: Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="owners", description="Muestra los owners del bot")
-async def ver_owners(interaction: Interaction):
+async def slash_owners(interaction: Interaction):
     embed = Embed(title="👑 Owners del bot", description="", color=discord.Color.gold())
     for owner_id in OWNER_IDS:
         try:
@@ -171,50 +171,125 @@ async def ver_owners(interaction: Interaction):
     embed.set_footer(text="Xereca Bot")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# === COMANDO !sync PARA FORZAR SINCRONIZACIÓN (SOLO OWNERS) ===
+# ============================================
+# COMANDOS DE TEXTO CON PREFIX !
+# ============================================
+
+@bot.command(name="start")
+async def text_start(ctx):
+    """Muestra los botones de descarga"""
+    embed = Embed(title="📥 Descargas", description="Elige un botón para obtener el link de descarga.", color=discord.Color.blue())
+    embed.set_footer(text="Xereca Bot · Admin")
+    view = DescargaView()
+    await ctx.send(embed=embed, view=view)
+
+@bot.command(name="actualizar")
+async def text_actualizar(ctx, clave: str = None, *, link: str = None):
+    """Actualiza un link de descarga (solo owners)"""
+    if not es_owner_id(ctx.author.id):
+        await ctx.send("⛔ Solo los owners pueden usar este comando.")
+        return
+    
+    if not clave or not link:
+        await ctx.send("⚠️ Uso correcto: `!actualizar <clave> <link>`\nClaves: normal, x86, max, emulador, loader_sensi, sensi_xiters")
+        return
+    
+    claves_validas = ["normal", "x86", "max", "emulador", "loader_sensi", "sensi_xiters"]
+    if clave not in claves_validas:
+        await ctx.send(f"❌ Clave no válida. Usa: {', '.join(claves_validas)}")
+        return
+    
+    links = cargar_links()
+    link_anterior = links.get(clave, "No configurado")
+    links[clave] = link
+    guardar_links(links)
+    
+    await ctx.send(f"✅ Link actualizado!\n**{clave.upper()}**\n📌 Anterior: {link_anterior}\n🆕 Nuevo: {link}")
+
+@bot.command(name="links")
+async def text_links(ctx):
+    """Muestra todos los links guardados (solo owners)"""
+    if not es_owner_id(ctx.author.id):
+        await ctx.send("⛔ Solo los owners pueden usar este comando.")
+        return
+    
+    links = cargar_links()
+    if not links:
+        await ctx.send("📭 No hay links configurados aún.")
+        return
+    
+    embed = Embed(title="📋 Links actuales", color=discord.Color.blue())
+    for clave, link in links.items():
+        embed.add_field(name=clave.upper(), value=link, inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command(name="owners")
+async def text_owners(ctx):
+    """Muestra los owners del bot"""
+    embed = Embed(title="👑 Owners del bot", color=discord.Color.gold())
+    desc = ""
+    for owner_id in OWNER_IDS:
+        try:
+            user = await bot.fetch_user(owner_id)
+            desc += f"• {user.name}#{user.discriminator} (`{owner_id}`)\n"
+        except:
+            desc += f"• Owner ID: `{owner_id}`\n"
+    embed.description = desc
+    await ctx.send(embed=embed)
+
 @bot.command(name="sync")
-async def sync_commands(ctx):
+async def text_sync(ctx):
     """Fuerza la sincronización de los comandos slash (solo owners)"""
-    # Verificar si es owner
-    if ctx.author.id not in OWNER_IDS:
+    if not es_owner_id(ctx.author.id):
         await ctx.send("⛔ Solo los owners pueden usar este comando.")
         return
     
     try:
-        # Sincronizar en el servidor específico
-        guild = discord.Object(id=GUILD_ID)
-        await bot.tree.sync(guild=guild)
-        await ctx.send(f"✅ Comandos sincronizados en el servidor! (ID: {GUILD_ID})")
-        
-        # También sincronizar globalmente
         await bot.tree.sync()
-        await ctx.send("✅ Comandos sincronizados globalmente también!")
-            
+        await ctx.send("✅ Comandos slash sincronizados globalmente! Puede tardar hasta 1 hora.")
+        
+        # Intentar sincronizar en el servidor actual
+        try:
+            guild = discord.Object(id=ctx.guild.id)
+            await bot.tree.sync(guild=guild)
+            await ctx.send(f"✅ Comandos sincronizados en este servidor! (Inmediato)")
+        except:
+            pass
     except Exception as e:
         await ctx.send(f"❌ Error al sincronizar: {e}")
 
-# === SINCORNIZAR COMANDOS EN EL SERVIDOR ESPECÍFICO AL INICIAR ===
+@bot.command(name="ping")
+async def text_ping(ctx):
+    """Verifica si el bot está vivo"""
+    await ctx.send(f"🏓 Pong! Latencia: {round(bot.latency * 1000)}ms")
+
+@bot.command(name="test")
+async def text_test(ctx):
+    """Comando de prueba"""
+    await ctx.send("✅ El bot está funcionando correctamente!")
+
+# === SINCORNIZAR AL INICIAR ===
 @bot.event
 async def on_ready():
     try:
-        # Sincronizar en el servidor específico
-        guild = discord.Object(id=GUILD_ID)
-        await bot.tree.sync(guild=guild)
-        print(f"✅ Comandos sincronizados en el servidor: {GUILD_ID}")
-    except Exception as e:
-        print(f"❌ Error al sincronizar: {e}")
-    
-    # También sincronizar globalmente
-    try:
         await bot.tree.sync()
-        print("✅ Comandos sincronizados globalmente")
+        print("✅ Comandos slash sincronizados globalmente")
     except Exception as e:
         print(f"❌ Error al sincronizar global: {e}")
     
     print(f"🤖 Xereca Bot conectado como {bot.user}")
     print(f"👑 Owners: {OWNER_IDS}")
     print(f"📊 Conectado a {len(bot.guilds)} servidores")
-    print("💡 Si no ves los comandos, usa !sync en Discord")
+    print("=" * 50)
+    print("💡 COMANDOS DISPONIBLES:")
+    print("   !start       - Muestra botones de descarga")
+    print("   !actualizar  - Actualiza links (owners)")
+    print("   !links       - Ver todos los links (owners)")
+    print("   !owners      - Ver owners del bot")
+    print("   !sync        - Sincronizar slash commands (owners)")
+    print("   !ping        - Verificar si el bot está vivo")
+    print("   !test        - Comando de prueba")
+    print("=" * 50)
 
 # === SERVIDOR WEB PARA MANTENER EL BOT VIVO ===
 app = Flask(__name__)
